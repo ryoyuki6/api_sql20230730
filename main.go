@@ -4,6 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 	_ "github.com/lib/pq"
+
+	"bytes"
+	"encoding/json"
+	"log"
+	"net/http"
 )
 
 var DB *sql.DB
@@ -17,19 +22,41 @@ func init() {
 }
 
 type Order struct {
-	Id				int
-	OrderName		string
-	NumberOfOrders	int
+	Id				int		`json:"id"`
+	OrderName		string	`json:"order_name"`
+	NumberOfOrders	int		`json:"number_of_orders"`
 }
 
 func main() {
-	rows, err := DB.Query("SELECT * FROM order_list ORDER BY id")
-	if err != nil {
-		return
+	handler1 := func (w http.ResponseWriter, r *http.Request)  {
+		var  buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+
+		orders := []Order{}
+
+		rows, err := DB.Query("SELECT * FROM order_list ORDER BY id")
+		if err != nil {
+			return
+		}
+		for rows.Next() {
+			m := Order{}
+			rows.Scan(&m.Id, &m.OrderName, &m.NumberOfOrders)
+			fmt.Println(m)
+			orders = append(orders, m)
+		}
+
+		if err2 := enc.Encode(&orders); err2 != nil {
+			log.Fatal(err)
+		}
+
+		w.Header().Set("Access-Control-Allow-Origin","http://localhost:3000")
+
+		_, err3 := fmt.Fprint(w, buf.String())
+		if err3 != nil {
+			return
+		}
 	}
-	for rows.Next() {
-		m := Order{}
-		rows.Scan(&m.Id, &m.OrderName, &m.NumberOfOrders)
-		fmt.Println(m)
-	}
+
+	http.HandleFunc("/order", handler1)
+	log.Fatal(http.ListenAndServe(":8000", nil))
 }
